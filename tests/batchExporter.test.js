@@ -74,6 +74,12 @@ test("exportBookAsMarkdown returns markdown and title", async () => {
         abstract: "abstract",
         markText: "note content",
       },
+      {
+        chapterUid: "2",
+        type: 1,
+        range: "2-3",
+        abstract: "![Test Book 封面](https://example.com/t6_cover.png)\n阅读周期:\n* 阅读时长：6 小时",
+      },
     ],
   };
   const reviewData = { reviews: [] };
@@ -94,11 +100,12 @@ test("exportBookAsMarkdown returns markdown and title", async () => {
   assert.ok(result.markdown.includes("Test Book"));
   assert.ok(result.markdown.startsWith("![Test Book 封面](https://example.com/t6_cover.png)"));
   assert.equal(result.coverUrl, "https://example.com/t6_cover.png");
-  assert.equal(result.notes.length, 1);
+  assert.equal(result.notes.length, 2);
   assert.equal(result.notes[0].chapterTitle, "Ch1");
   assert.equal(result.notes[0].markText, "note content");
   assert.equal(result.notes[0].isbn, "ISBN-1");
   assert.equal(result.notes[0].publisher, "Publisher-1");
+  assert.equal(result.notes[1].markText, ""); // sanitized bad mark
   assert.equal(result.publisher, "Publisher-1");
   assert.equal(result.isbn, "ISBN-1");
   assert.equal(calls.length, 4);

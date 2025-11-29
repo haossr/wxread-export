@@ -137,6 +137,16 @@ function buildNoteRecords(
   });
 
   const updated = Array.isArray(markData?.updated) ? markData.updated : [];
+  const sanitizeMark = (text: any) => {
+    const normalized = normalizeText(text);
+    if (typeof normalized !== "string") return normalized;
+    const trimmed = normalized.trim();
+    const looksLikeWholeDoc = /!\[.+封面\]\(.*\)/.test(trimmed) && trimmed.includes("阅读周期");
+    const hasCoverKeyword = trimmed.includes("封面");
+    if (looksLikeWholeDoc || hasCoverKeyword) return "";
+    return trimmed;
+  };
+
   return updated
     .filter((mark: any) => mark?.type === 1)
     .map((mark: any) => {
@@ -152,8 +162,8 @@ function buildNoteRecords(
         chapterUid: mark.chapterUid,
         chapterTitle: findChapterTitle(chapters, mark.chapterUid),
         range: mark.range,
-        markText: normalizeText(mark.markText || mark.abstract || ""),
-        reviewText: normalizeText(reviewMap.get(key) || ""),
+        markText: sanitizeMark(mark.markText || mark.abstract || ""),
+        reviewText: sanitizeMark(reviewMap.get(key) || ""),
         createdAt: mark.createTime || "",
         style: mark.style,
         readingTime: progress.readingTime,
