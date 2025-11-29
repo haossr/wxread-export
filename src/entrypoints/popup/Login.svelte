@@ -1,23 +1,26 @@
 <script>
   import { onMount } from "svelte";
-  import { openLoginPage } from "./loginRedirect";
+  import { triggerLoginRedirect, closePopupWindow } from "./loginRedirect";
 
   export let loginStatus;
 
   let redirected = false;
 
-  function triggerLoginRedirect() {
+  function ensureRedirect() {
     if (redirected) return;
     redirected = true;
-    openLoginPage(loginStatus, {
+    triggerLoginRedirect(loginStatus, {
       chromeTabs: typeof chrome !== "undefined" ? chrome.tabs : undefined,
       browserTabs: typeof browser !== "undefined" ? browser.tabs : undefined,
       windowOpen: typeof window !== "undefined" ? window.open : undefined,
     });
+    closePopupWindow({
+      windowClose: typeof window !== "undefined" ? window.close : undefined,
+    });
   }
 
   onMount(() => {
-    triggerLoginRedirect();
+    ensureRedirect();
   });
 </script>
 

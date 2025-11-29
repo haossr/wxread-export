@@ -1,6 +1,7 @@
 <script>
   import List from "./List.svelte";
   import Login from "./Login.svelte";
+  import { triggerLoginRedirect, closePopupWindow } from "./loginRedirect";
   let loading = true;
   let user = { loggedIn: false, loginStatus: "unlogin" };
   function judgeIsLogin() {
@@ -24,6 +25,14 @@
             break;
           }
         }
+        triggerLoginRedirect(user.loginStatus, {
+          chromeTabs: typeof chrome !== "undefined" ? chrome.tabs : undefined,
+          browserTabs: typeof browser !== "undefined" ? browser.tabs : undefined,
+          windowOpen: typeof window !== "undefined" ? window.open : undefined,
+        });
+        closePopupWindow({
+          windowClose: typeof window !== "undefined" ? window.close : undefined,
+        });
       })
       .catch((e) => {
         loading = false;

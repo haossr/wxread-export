@@ -1,5 +1,6 @@
 const BASE_URL = "https://weread.qq.com";
 const LOGIN_PATH = "/#login";
+let redirected = false;
 
 export function resolveLoginUrl(loginStatus) {
   return loginStatus === "timeout" ? BASE_URL : `${BASE_URL}${LOGIN_PATH}`;
@@ -28,4 +29,24 @@ export function openLoginPage(loginStatus, clients = {}) {
   }
 
   return { used: "none", url };
+}
+
+export function triggerLoginRedirect(loginStatus, clients = {}) {
+  if (redirected) return { used: "skipped", url: resolveLoginUrl(loginStatus) };
+  redirected = true;
+  return openLoginPage(loginStatus, clients);
+}
+
+export function closePopupWindow(clients = {}) {
+  const closeFn =
+    clients.windowClose ||
+    (typeof window !== "undefined" && typeof window.close === "function" ? window.close : undefined);
+  if (!closeFn) return false;
+  closeFn();
+  return true;
+}
+
+// Only for tests
+export function __resetRedirectFlag() {
+  redirected = false;
 }
