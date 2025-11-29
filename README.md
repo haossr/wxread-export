@@ -9,13 +9,19 @@
 # 功能
 
 - [x] 显示带笔记的书籍列表
-- [x] 一键导出 markdown 格式划线/评论
-- [ ] 自定义导出内容（书籍信息、书籍评分等）
-- [ ] 自定义导出格式
+- [x] 一键导出笔记（Markdown / JSON / CSV，自动合并单文件）
+- [x] 导出包含封面、作者、评分、章节、划线、想法、阅读时长等字段
+- [x] 登录状态自动检测，未登录自动跳转并关闭弹窗
 - [ ] 导出笔记图片
 - [ ] 支持 Firefox、Chrome 商店下载
 
-## 一键导出 markdown 格式划线/评论
+## 导出格式说明
+
+- Markdown：合并单文件，含封面、章节和划线/想法
+- JSON：去规范化，单条笔记一行，含书籍信息、章节、阅读时间等
+- CSV：去规范化，单条笔记一行，便于表格处理
+
+## 一键导出示例（Markdown）
 
 ![](https://raw.githubusercontent.com/scarqin/wxread-export/main/wiki/note-demo.png)
 
@@ -63,4 +69,3 @@ pnpm dev
 ```
 pnpm build
 ```
-

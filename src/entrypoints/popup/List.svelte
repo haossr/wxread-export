@@ -13,14 +13,13 @@
   const BULK_RETRIES = 2;
   const REQUEST_RETRY_DELAYS = RETRY_SCHEDULE.slice(0, 2);
   const EXPORT_FORMATS = [
-    { value: "markdown", label: "Markdown (.md，合并一份)" },
-    { value: "json", label: "JSON (.json，合并一份)" },
-    { value: "csv", label: "CSV (.csv，合并一份)" },
+    { value: "markdown", label: "Markdown (.md)" },
+    { value: "json", label: "JSON (.json)" },
+    { value: "csv", label: "CSV (.csv)" },
   ];
 
   let books = [];
   let selectedBookIds = [];
-  let singleWorking = false;
   let bulkWorking = false;
   let progress = { done: 0, total: 0, failed: [] };
   let retryCount = 0;
@@ -35,8 +34,6 @@
   $: if (selectAllCheckbox) {
     selectAllCheckbox.indeterminate = selectionIndeterminate;
   }
-  $: singleButtonText =
-    exportFormat === "markdown" ? (singleWorking ? "复制中..." : "复制选中") : singleWorking ? "导出中..." : "导出选中";
 
   function getNoteBooks() {
     fetch("https://weread.qq.com/api/user/notebook")
@@ -85,36 +82,6 @@
   function getTitleById(bookId) {
     const target = books.find((book) => book.bookId === bookId);
     return target?.title || bookId;
-  }
-
-  async function exportSelectedSingle() {
-    if (singleWorking || bulkWorking) return;
-    if (!selectedBookIds.length) return;
-    if (selectedBookIds.length > 1) {
-      alert("单本导出时请只选择一本书");
-      return;
-    }
-    const bookId = selectedBookIds[0];
-    singleWorking = true;
-    try {
-      const exported = await exportBookAsMarkdown(
-        bookId,
-        userVid,
-        REQUEST_RETRY_DELAYS,
-      );
-      if (exportFormat === "markdown") {
-        downloadCombinedExport([exported], exportFormat);
-        alert(`已导出 ${exported.title} 的 Markdown 文件`);
-      } else {
-        downloadCombinedExport([exported], exportFormat);
-        alert(`已导出 ${exported.title} 的 ${exportFormat.toUpperCase()} 文件`);
-      }
-    } catch (error) {
-      console.error("导出失败", error);
-      alert("导出失败，请稍后重试");
-    } finally {
-      singleWorking = false;
-    }
   }
 
   async function handleBulkExport() {
@@ -196,7 +163,7 @@
       <select
         class="mdui-select"
         bind:value={exportFormat}
-        disabled={singleWorking || bulkWorking}
+        disabled={bulkWorking}
       >
         {#each EXPORT_FORMATS as option}
           <option value={option.value}>{option.label}</option>
@@ -214,64 +181,60 @@
       <i class="mdui-checkbox-icon" />
       <span>全选</span>
     </label>
-    <button
-      class="mdui-btn"
-      on:click={exportSelectedSingle}
-      disabled={!hasSelection || singleWorking || bulkWorking}
-    >
-      {singleButtonText}
-    </button>
     <button class="mdui-btn mdui-color-theme" on:click={handleBulkExport} disabled={!hasSelection || bulkWorking}>
-      {bulkWorking ? "批量导出中..." : "批量导出"}
+      {bulkWorking ? "导出中..." : "批量导出"}
     </button>
   </div>
 </div>
 
-{#if progress.total}
-  <div class="progress-card">
-    <div class="progress-line">进度 {progress.done} / {progress.total}</div>
-    <div class="progress-line">
-      重试 {retryCount} · 并发 {BATCH_OPTIONS.concurrency} · 间隔 {BATCH_OPTIONS.delayMs}ms
-    </div>
-    <div class="progress-bar">
-      <div class="progress-bar__fill" style={`width: ${progressPercent}%`} />
-    </div>
-    <div class="progress-line small">已完成 {progressPercent}%</div>
-    {#if progress.failed.length}
-      <div class="progress-line warning">
-        失败 {progress.failed.length} 本
-        {#if failedListUrl}
-          <a class="failed-link" href={failedListUrl} download="failed_list.txt">下载失败列表</a>
-        {/if}
+<div class="page-content">
+  {#if progress.total}
+    <div class="progress-card">
+      <div class="progress-header">
+        <div class="progress-title">进度 {progress.done} / {progress.total}</div>
+        <div class="progress-meta">重试 {retryCount} · 并发 {BATCH_OPTIONS.concurrency} · 间隔 {BATCH_OPTIONS.delayMs}ms</div>
       </div>
-    {/if}
-  </div>
-{/if}
-
-<div class="mdui-container book-list-wrap">
-  {#each books as book (book.bookId)}
-    <div
-      class={`mdui-card mdui-col book-card ${selectedBookIds.includes(book.bookId) ? "selected" : ""}`}
-      on:click={() => toggleSelectBook(book.bookId)}
-    >
-      <div class="mdui-card-media">
-        <img src={book.cover.replace("s_", "t6_")} alt="cover" />
-        <div class="mdui-card-media-covered card-checkbox">
-          <label class="mdui-checkbox" on:click|stopPropagation={() => toggleSelectBook(book.bookId)}>
-            <input
-              type="checkbox"
-              checked={selectedBookIds.includes(book.bookId)}
-              disabled={bulkWorking}
-            />
-            <i class="mdui-checkbox-icon" />
-          </label>
+      <div class="progress-bar">
+        <div class="progress-bar__fill" style={`width: ${progressPercent}%`}>
+          <span class="progress-bar__text">{progressPercent}%</span>
         </div>
       </div>
-      <div class="mdui-card-actions">
-        <div class="mdui-typo-body-2 text-omit">{book.title}</div>
-      </div>
+      {#if progress.failed.length}
+        <div class="progress-line warning">
+          失败 {progress.failed.length} 本
+          {#if failedListUrl}
+            <a class="failed-link" href={failedListUrl} download="failed_list.txt">下载失败列表</a>
+          {/if}
+        </div>
+      {/if}
     </div>
-  {/each}
+  {/if}
+
+  <div class="mdui-container book-list-wrap">
+    {#each books as book (book.bookId)}
+      <div
+        class={`mdui-card mdui-col book-card ${selectedBookIds.includes(book.bookId) ? "selected" : ""}`}
+        on:click={() => toggleSelectBook(book.bookId)}
+      >
+        <div class="mdui-card-media">
+          <img src={book.cover.replace("s_", "t6_")} alt="cover" />
+          <div class="mdui-card-media-covered card-checkbox">
+            <label class="mdui-checkbox" on:click|stopPropagation={() => toggleSelectBook(book.bookId)}>
+              <input
+                type="checkbox"
+                checked={selectedBookIds.includes(book.bookId)}
+                disabled={bulkWorking}
+              />
+              <i class="mdui-checkbox-icon" />
+            </label>
+          </div>
+        </div>
+        <div class="mdui-card-actions">
+          <div class="mdui-typo-body-2 text-omit">{book.title}</div>
+        </div>
+      </div>
+    {/each}
+  </div>
 </div>
 
 <style>
@@ -279,6 +242,27 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .mdui-toolbar {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .mdui-toolbar .mdui-toolbar-spacer {
+    flex: 1 1 auto;
+  }
+
+  .toolbar-actions .mdui-btn {
+    min-width: 112px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+  }
+
+  .page-content {
+    padding-top: 76px;
   }
 
   .format-select {
@@ -287,11 +271,25 @@
     gap: 4px;
     color: #fff;
     font-size: 13px;
+    font-weight: 500;
   }
 
   .format-select select {
-    padding: 4px 6px;
-    border-radius: 4px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+    font-weight: 500;
+    font-size: 13px;
+    letter-spacing: 0.1px;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 6px 16px rgba(36, 160, 237, 0.28);
+  }
+
+  .format-select select:focus {
+    outline: 2px solid #fff;
+    outline-offset: 1px;
   }
 
   .select-all {
@@ -299,6 +297,8 @@
     align-items: center;
     gap: 4px;
     color: #fff;
+    font-size: 13px;
+    font-weight: 500;
   }
 
   .text-omit {
@@ -309,32 +309,58 @@
   }
 
   .progress-card {
-    padding: 12px 20px 4px;
-    color: #555;
+    padding: 12px 20px 10px;
+    color: #2a2f37;
+    background: #f7fbff;
+    border: 1px solid #e2effa;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(36, 160, 237, 0.08);
+    margin: 8px 16px;
+  }
+
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .progress-title {
+    font-weight: 600;
+  }
+
+  .progress-meta {
+    font-size: 12px;
+    color: #5a6672;
   }
 
   .progress-line {
-    margin-bottom: 4px;
+    margin-top: 6px;
     font-size: 13px;
-  }
-
-  .progress-line.small {
-    color: #777;
   }
 
   .progress-bar {
     width: 100%;
-    height: 8px;
-    background: #e0e0e0;
-    border-radius: 6px;
+    height: 12px;
+    background: #d9ebf9;
+    border-radius: 999px;
     overflow: hidden;
-    margin: 6px 0;
+    margin-top: 4px;
+    position: relative;
   }
 
   .progress-bar__fill {
     height: 100%;
-    background: linear-gradient(90deg, #3f51b5, #2196f3);
-    transition: width 0.2s ease;
+    background: linear-gradient(90deg, #24a0ed, #5cc4ff);
+    transition: width 0.25s ease;
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.06);
   }
 
   .warning {
@@ -352,7 +378,7 @@
   }
 
   .book-card.selected {
-    box-shadow: 0 0 0 2px #3f51b5;
+    box-shadow: 0 0 0 2px #24a0ed;
     transform: translateY(-2px);
   }
 
@@ -370,11 +396,12 @@
 
   .mdui-container {
     width: 100%;
-    padding: 20px;
-    padding-top: 80px;
+    padding: 12px 20px 20px;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     grid-row-gap: 20px;
     grid-column-gap: 20px;
+    box-sizing: border-box;
+    overflow-x: hidden;
   }
 </style>

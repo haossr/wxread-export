@@ -59,7 +59,7 @@
   </div>
 {/if}
 {#if !loading}
-  <div class="root-app mdui-theme-primary-indigo mdui-theme-accent-indigo">
+  <div class="root-app mdui-theme-primary-indigo mdui-theme-accent-indigo theme-wechat">
     {#if user.loggedIn}
       <List userVid={user.userVid} />
     {/if}
@@ -71,5 +71,42 @@
 <style>
   .root-app {
     width: fit-content;
+  }
+
+  .theme-wechat {
+    --theme-color: #24a0ed;
+  }
+
+  .theme-wechat .mdui-color-theme,
+  .theme-wechat .mdui-btn.mdui-color-theme {
+    background-color: var(--theme-color) !important;
+    color: #fff !important;
+  }
+
+  .theme-wechat .mdui-toolbar,
+  .theme-wechat .mdui-appbar {
+    background-color: var(--theme-color) !important;
+    color: #fff !important;
+  }
+
+  .theme-wechat .mdui-appbar .mdui-toolbar {
+    background-color: var(--theme-color) !important;
+    color: #fff !important;
+  }
+
+  .theme-wechat .mdui-appbar .mdui-toolbar .mdui-typo-title {
+    color: #fff !important;
+  }
+
+  .theme-wechat .toolbar-actions .mdui-btn {
+    border: 1px solid rgba(255, 255, 255, 0.35);
+  }
+
+  .theme-wechat .mdui-checkbox-icon:before {
+    border-color: #fff;
+  }
+
+  .theme-wechat .progress-bar__fill {
+    background: linear-gradient(90deg, #24a0ed, #5cc4ff);
   }
 </style>

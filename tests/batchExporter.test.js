@@ -57,7 +57,13 @@ test("batchRun waits between sequential runs when delay is set", async () => {
 test("exportBookAsMarkdown returns markdown and title", async () => {
   const calls = [];
   const markData = {
-    book: { title: "Test Book", author: "Author", cover: "https://example.com/s_cover.png" },
+    book: {
+      title: "Test Book",
+      author: "Author",
+      cover: "https://example.com/s_cover.png",
+      isbn: "ISBN-1",
+      publisher: "Publisher-1",
+    },
     chapters: [{ chapterUid: "1", chapterIdx: 1, title: "Ch1" }],
     updated: [
       {
@@ -71,10 +77,11 @@ test("exportBookAsMarkdown returns markdown and title", async () => {
   };
   const reviewData = { reviews: [] };
   const progressData = { book: { startReadingTime: 0, finishTime: 0, readingTime: 3600 } };
+  const infoData = { publisher: "Publisher-1", isbn: "ISBN-1", rating: 95, cover: "https://example.com/info_cover.png" };
 
   global.fetch = async (url) => {
     calls.push(url);
-    const data = [markData, reviewData, progressData][calls.length - 1];
+    const data = [markData, reviewData, progressData, infoData][calls.length - 1];
     return {
       ok: true,
       json: async () => data,
@@ -89,7 +96,11 @@ test("exportBookAsMarkdown returns markdown and title", async () => {
   assert.equal(result.notes.length, 1);
   assert.equal(result.notes[0].chapterTitle, "Ch1");
   assert.equal(result.notes[0].markText, "note content");
-  assert.equal(calls.length, 3);
+  assert.equal(result.notes[0].isbn, "ISBN-1");
+  assert.equal(result.notes[0].publisher, "Publisher-1");
+  assert.equal(result.publisher, "Publisher-1");
+  assert.equal(result.isbn, "ISBN-1");
+  assert.equal(calls.length, 4);
 
   global.fetch = originalFetch;
 });
@@ -99,15 +110,16 @@ test("exportBookAsMarkdown retries on retryable error", async () => {
   const markData = { book: { title: "Book" }, chapters: [], updated: [] };
   const reviewData = { reviews: [] };
   const progressData = { book: { startReadingTime: 0, finishTime: 0, readingTime: 0 } };
+  const infoData = { publisher: "Pub", isbn: "ISBN-R" };
 
   global.fetch = async () => {
-    const pos = call % 3;
-    const attempt = Math.floor(call / 3);
+    const pos = call % 4;
+    const attempt = Math.floor(call / 4);
     call++;
     if (attempt === 0 && pos === 0) {
       return { ok: false, status: 500 };
     }
-    const payload = pos === 0 ? markData : pos === 1 ? reviewData : progressData;
+    const payload = pos === 0 ? markData : pos === 1 ? reviewData : pos === 2 ? progressData : infoData;
     return {
       ok: true,
       json: async () => payload,
@@ -116,7 +128,7 @@ test("exportBookAsMarkdown retries on retryable error", async () => {
 
   const result = await exportBookAsMarkdown("book-2", "user-vid", [0]);
   assert.equal(result.bookId, "book-2");
-  assert.ok(call >= 6);
+  assert.ok(call >= 8);
 
   global.fetch = originalFetch;
 });
@@ -128,7 +140,15 @@ test("sanitizeFileName strips illegal characters", () => {
 
 test("buildCombinedExport outputs JSON with all books", () => {
   const items = [
-    { bookId: "1", title: "A", markdown: "m1", coverUrl: "c1", notes: [{ markText: "n1" }] },
+    {
+      bookId: "1",
+      title: "A",
+      markdown: "m1",
+      coverUrl: "c1",
+      isbn: "ISBN-A",
+      publisher: "Pub-A",
+      notes: [{ markText: "n1" }],
+    },
     { bookId: "2", title: "B", markdown: "m2", notes: [{ markText: "n2" }] },
   ];
   const result = buildCombinedExport(items, "json");
@@ -136,9 +156,11 @@ test("buildCombinedExport outputs JSON with all books", () => {
   assert.equal(result.mimeType, "application/json;charset=utf-8");
   const parsed = JSON.parse(result.content);
   assert.equal(parsed.length, 2);
+  assert.equal(parsed[0].title, "A");
   assert.equal(parsed[1].title, "B");
-  assert.equal(parsed[0].coverUrl, "c1");
-  assert.equal(parsed[0].notes[0].markText, "n1");
+  assert.equal(parsed[0].markText, "n1");
+  assert.equal(parsed[0].isbn, "ISBN-A");
+  assert.equal(parsed[0].publisher, "Pub-A");
 });
 
 test("buildCombinedExport outputs CSV and escapes newlines/quotes", () => {
@@ -150,6 +172,8 @@ test("buildCombinedExport outputs CSV and escapes newlines/quotes", () => {
       coverUrl: "c1",
       author: "Auth",
       rating: 5,
+      isbn: "ISBN-CSV",
+      publisher: "Pub-CSV",
       notes: [
         {
           chapterUid: 1,
@@ -171,7 +195,9 @@ test("buildCombinedExport outputs CSV and escapes newlines/quotes", () => {
   assert.ok(result.content.includes('"A ""quote"""'));
   assert.ok(result.content.includes("mk"));
   assert.ok(result.content.includes("rv"));
-  assert.ok(result.content.startsWith("bookId,title,author,rating,coverUrl,chapterUid"));
+  assert.ok(result.content.startsWith("bookId,title,author,rating,isbn,publisher,coverUrl,chapterUid"));
+  assert.ok(result.content.includes("ISBN-CSV"));
+  assert.ok(result.content.includes("Pub-CSV"));
 });
 
 test("buildCombinedExport outputs combined markdown with cover", () => {
@@ -298,7 +324,7 @@ test("exportBookAsMarkdown does not retry non-retryable status", async () => {
     error = e;
   }
   assert.ok(error instanceof ExportRequestError);
-  assert.equal(calls, 1 * 3); // three fetches in the first attempt
+  assert.equal(calls, 4); // four fetches in the first attempt (marks/reviews/progress/info)
 
   global.fetch = originalFetch;
 });

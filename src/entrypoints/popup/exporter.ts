@@ -7,6 +7,11 @@ export type NoteRecord = {
   author?: string;
   coverUrl?: string;
   rating?: string | number;
+  publisher?: string;
+  isbn?: string;
+  finishTime?: number;
+  startTime?: number;
+  readingTime?: number;
   chapterUid?: number;
   chapterTitle?: string;
   range?: string;
@@ -14,9 +19,6 @@ export type NoteRecord = {
   reviewText?: string;
   createdAt?: number | string;
   style?: number;
-  readingTime?: number;
-  startTime?: number;
-  finishTime?: number;
 };
 
 export type ExportedBook = {
@@ -26,7 +28,12 @@ export type ExportedBook = {
   coverUrl?: string;
   author?: string;
   rating?: string | number;
+  publisher?: string;
   notes: NoteRecord[];
+  finishTime?: number;
+  startTime?: number;
+  readingTime?: number;
+  isbn?: string;
 };
 
 export type ExportFormat = "markdown" | "json" | "csv";
@@ -60,14 +67,36 @@ function normalizeCoverUrl(raw?: string) {
   return raw.replace("s_", "t6_");
 }
 
+function buildBookMeta(bookId: string, markBook: any, infoBook: any) {
+  const combined = { ...(infoBook || {}), ...(markBook || {}) };
+  return {
+    bookId,
+    title: markBook?.title || infoBook?.title || bookId,
+    author: combined.author,
+    cover: combined.cover,
+    rating:
+      combined.rating ??
+      combined.score ??
+      combined.newRating ??
+      combined.star ??
+      (typeof combined.ratingDetail?.recent !== "undefined" ? combined.ratingDetail.recent : ""),
+    isbn: combined.isbn || combined.isbn13 || "",
+    publisher: combined.publisher || combined.publish || "",
+  };
+}
+
 function findChapterTitle(chapters: any[] | undefined, chapterUid: number | undefined) {
   if (!chapters || typeof chapterUid === "undefined") return "";
   const target = chapters.find((c) => c.chapterUid === chapterUid);
   return target?.title || "";
 }
 
-function buildNoteRecords(markData: any, reviewData: any, progressData: any): NoteRecord[] {
-  const book = markData?.book || {};
+function buildNoteRecords(
+  markData: any,
+  reviewData: any,
+  progressData: any,
+  meta: ReturnType<typeof buildBookMeta>,
+): NoteRecord[] {
   const chapters = Array.isArray(markData?.chapters) ? markData.chapters : [];
   const progress = progressData?.book || {};
 
@@ -85,11 +114,13 @@ function buildNoteRecords(markData: any, reviewData: any, progressData: any): No
     .map((mark: any) => {
       const key = `${mark.chapterUid}-${mark.range}`;
       return {
-        bookId: mark.bookId || book.bookId,
-        title: book.title,
-        author: book.author,
-        coverUrl: normalizeCoverUrl(book.cover),
-        rating: book.rating ?? book.score ?? "",
+        bookId: mark.bookId || meta.bookId,
+        title: meta.title,
+        author: meta.author,
+        coverUrl: normalizeCoverUrl(meta.cover),
+        rating: meta.rating,
+        publisher: meta.publisher,
+        isbn: meta.isbn,
         chapterUid: mark.chapterUid,
         chapterTitle: findChapterTitle(chapters, mark.chapterUid),
         range: mark.range,
@@ -113,27 +144,36 @@ export async function exportBookAsMarkdown(
     `https://weread.qq.com/web/book/bookmarklist?bookId=${bookId}`,
     `https://weread.qq.com/web/review/list?bookId=${bookId}&mine=1&listType=11&maxIdx=0&count=0&listMode=2&synckey=0&userVid=${userVid}`,
     `https://weread.qq.com/web/book/getProgress?bookId=${bookId}`,
+    `https://weread.qq.com/web/book/info?bookId=${bookId}`,
   ];
 
   let attempt = 0;
   while (true) {
     try {
-      const [markData, reviewData, progressData] = await Promise.all(urls.map(fetchJson));
+      const [markData, reviewData, progressData, infoData] = await Promise.all(
+        urls.map(fetchJson),
+      );
+      const meta = buildBookMeta(bookId, markData?.book, infoData);
       const markdown = generateBookMark(markData, reviewData, progressData);
-      const title = markData?.book?.title || bookId;
-      const coverUrl = normalizeCoverUrl(markData?.book?.cover);
+      const title = meta.title;
+      const coverUrl = normalizeCoverUrl(meta.cover);
       const markdownWithCover = coverUrl
         ? `![${title} 封面](${coverUrl})\n\n${markdown}`
         : markdown;
-      const notes = buildNoteRecords(markData, reviewData, progressData);
+      const notes = buildNoteRecords(markData, reviewData, progressData, meta);
       return {
         bookId,
         title,
         markdown: markdownWithCover,
         coverUrl,
-        author: markData?.book?.author,
-        rating: markData?.book?.rating ?? markData?.book?.score ?? "",
+        author: meta.author,
+        rating: meta.rating,
+        publisher: meta.publisher,
+        isbn: meta.isbn,
         notes,
+        finishTime: progressData?.book?.finishTime,
+        startTime: progressData?.book?.startReadingTime,
+        readingTime: progressData?.book?.readingTime,
       };
     } catch (error) {
       const shouldRetry = attempt < retryDelays.length && isRetryableError(error);
@@ -187,11 +227,44 @@ export function buildCombinedExport(items: ExportedBook[], format: ExportFormat)
     coverUrl: item.coverUrl,
     author: item.author,
     rating: item.rating,
+    publisher: item.publisher,
     notes: item.notes || [],
+    finishTime: item.finishTime ?? item.notes?.[0]?.finishTime ?? 0,
+    startTime: item.startTime ?? item.notes?.[0]?.startTime ?? 0,
+    readingTime: item.readingTime ?? item.notes?.[0]?.readingTime ?? 0,
+    isbn: item.isbn,
   }));
 
+  const sorted = [...safeItems].sort(
+    (a, b) => (b.finishTime ?? 0) - (a.finishTime ?? 0),
+  );
+
   if (format === "json") {
-    const content = JSON.stringify(safeItems, null, 2);
+    const rows: any[] = [];
+    sorted.forEach((item) => {
+      const notes = item.notes && item.notes.length ? item.notes : [{ markdown: item.markdown }];
+      notes.forEach((note: NoteRecord | any) => {
+        rows.push({
+          bookId: note.bookId || item.bookId,
+          title: item.title,
+          author: item.author || "",
+          rating: item.rating || "",
+          publisher: note.publisher || item.publisher || "",
+          coverUrl: note.coverUrl || item.coverUrl || "",
+          isbn: note.isbn || item.isbn || "",
+          chapterUid: note.chapterUid ?? "",
+          chapterTitle: note.chapterTitle || "",
+          range: note.range || "",
+          markText: note.markText || note.markdown || "",
+          reviewText: note.reviewText || "",
+          createdAt: note.createdAt || "",
+          readingTime: note.readingTime || item.readingTime || "",
+          startTime: note.startTime || item.startTime || "",
+          finishTime: note.finishTime || item.finishTime || "",
+        });
+      });
+    });
+    const content = JSON.stringify(rows, null, 2);
     return {
       fileName: "weread-export.json",
       content,
@@ -205,6 +278,8 @@ export function buildCombinedExport(items: ExportedBook[], format: ExportFormat)
       "title",
       "author",
       "rating",
+      "isbn",
+      "publisher",
       "coverUrl",
       "chapterUid",
       "chapterTitle",
@@ -217,7 +292,7 @@ export function buildCombinedExport(items: ExportedBook[], format: ExportFormat)
       "finishTime",
     ];
     const rows: string[] = [];
-    safeItems.forEach((item) => {
+    sorted.forEach((item) => {
       const notes = item.notes && item.notes.length ? item.notes : [{ markdown: item.markdown }];
       notes.forEach((note: NoteRecord | any) => {
         rows.push(
@@ -226,6 +301,8 @@ export function buildCombinedExport(items: ExportedBook[], format: ExportFormat)
             item.title,
             item.author || "",
             item.rating || "",
+            note.isbn || item.isbn || "",
+            note.publisher || item.publisher || "",
             note.coverUrl || item.coverUrl || "",
             note.chapterUid ?? "",
             note.chapterTitle || "",
@@ -251,7 +328,7 @@ export function buildCombinedExport(items: ExportedBook[], format: ExportFormat)
   }
 
   if (format === "markdown") {
-    const sections = safeItems.map((item) => {
+    const sections = sorted.map((item) => {
       return `# ${item.title}\n\n${item.markdown}`;
     });
     const content = sections.join("\n\n---\n\n");
