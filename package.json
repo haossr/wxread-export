@@ -11,6 +11,7 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "node --test tests",
     "postinstall": "wxt prepare"
   },
   "devDependencies": {
